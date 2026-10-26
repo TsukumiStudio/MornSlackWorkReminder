@@ -1,0 +1,87 @@
+name: Release mac app
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: node --test settings.test.cjs rules.test.cjs
+
+      - name: Build
+        run: VERSION="${GITHUB_REF_NAME#v}" sh build.sh
+
+      - name: Sign and notarize via MornNotary
+        env:
+          GH_TOKEN: ${{ secrets.MORN_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}" || { echo "::error::MORN_RELEASE_TOKEN is not set"; exit 1; }
+          gh auth setup-git
+          gh repo clone matsufriends/MornNotary "$RUNNER_TEMP/MornNotary" -- --depth 1
+          bash "$RUNNER_TEMP/MornNotary/sign.sh" build/MornSlackWorkReminder.app
+          rm -rf build/MornSlackWorkReminder.app
+          ditto -x -k build/MornSlackWorkReminder-signed.zip build
+          codesign --verify --deep --strict --verbose=2 build/MornSlackWorkReminder.app
+          xcrun stapler validate build/MornSlackWorkReminder.app
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ditto -c -k --keepParent build/MornSlackWorkReminder.app build/MornSlackWorkReminder.app.zip
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" build/MornSlackWorkReminder.app.zip --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" build/MornSlackWorkReminder.app.zip --repo "$GITHUB_REPOSITORY" --generate-notes
+          fi
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${HOMEBREW_TAP_TOKEN:-}" || { echo "::error::HOMEBREW_TAP_TOKEN is not set"; exit 1; }
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA="$(shasum -a 256 build/MornSlackWorkReminder.app.zip | awk '{print $1}')"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/TsukumiStudio/homebrew-tap.git" tap
+          cd tap
+          mkdir -p Casks
+          cat > Casks/mornslackworkreminder.rb <<EOF
+          cask "mornslackworkreminder" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/TsukumiStudio/MornSlackWorkReminder/releases/download/v#{version}/MornSlackWorkReminder.app.zip"
+            name "MornSlackWorkReminder"
+            desc "Menu bar app that nags you when you open personal Slack channels during work hours"
+            homepage "https://github.com/TsukumiStudio/MornSlackWorkReminder"
+
+            livecheck do
+              url :url
+              strategy :github_latest
+            end
+
+            depends_on macos: :sonoma
+            app "MornSlackWorkReminder.app"
+
+            zap trash: [
+              "~/Library/Preferences/com.tsukumistudio.MornSlackWorkReminder.plist",
+              "~/Library/Logs/MornSlackWorkReminder.log",
+            ]
+          end
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/mornslackworkreminder.rb
+          git commit -m "mornslackworkreminder ${VERSION}"
+          git push
