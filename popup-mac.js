@@ -67,8 +67,7 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const latest = (await response.json()).tag_name.replace(/^v/, "");
       update.disabled = !isNewer(latest, version);
-      // 最新なら何も言わない。更新があるときだけ知らせる。
-      updateStatus.textContent = update.disabled ? "" : `v${latest} があります。`;
+      updateStatus.textContent = update.disabled ? "最新版です。" : `v${latest} があります。`;
     } catch (error) {
       updateStatus.textContent = `確認できませんでした（${error.message}）。`;
     } finally {
