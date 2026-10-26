@@ -68,7 +68,7 @@
   check.addEventListener("click", async () => {
     check.disabled = true;
     try {
-      const response = await fetch("https://api.github.com/repos/TsukumiStudio/MornSlackWorkReminder/releases/latest");
+      const response = await fetch("https://api.github.com/repos/TsukumiStudio/MornSlackWorkReminder/releases/latest", { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const latest = (await response.json()).tag_name.replace(/^v/, "");
       update.disabled = !isNewer(latest, version);
