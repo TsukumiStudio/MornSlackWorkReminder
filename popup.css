@@ -30,4 +30,5 @@ button { flex: 1; border: 1px solid #dfe3ed; border-radius: 9px; padding: 10px 6
 button:hover { filter: brightness(.97); }
 button:disabled { opacity: .5; cursor: wait; }
 :focus-visible { outline: 2px solid #7560db; outline-offset: 3px; }
-#status { min-height: 20px; margin-top: 10px; font-size: 11px; }
+#status { margin-top: 10px; font-size: 11px; }
+#status:empty { display: none; }

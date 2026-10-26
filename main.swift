@@ -161,15 +161,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
     let eligible = result.objectForKeyedSubscript("eligible").toBool()
     trace("title=\"\(slack.title)\" name=\"\(name)\" 対象=\(eligible) 警告条件=\(result.objectForKeyedSubscript("warn").toBool()) 表示=\(slack.windowNumber != nil)")
     guard eligible else { reset(); return }
+    // 個人チャンネル同士の移動では警告を残す（渡り歩いて逃げられないように）。
     if name != activeChannel {
-      removeOverlay()
       activeChannel = name
       enteredAt = now
-      nextWarning = .distantPast
     }
     guard result.objectForKeyedSubscript("warn").toBool() else {
       removeOverlay()
-      nextWarning = .distantPast
       return
     }
     if overlay == nil && now >= nextWarning { showWarning() }
@@ -192,7 +190,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
   func reset() {
     removeOverlay()
     activeChannel = ""
-    nextWarning = .distantPast
   }
 
   // MARK: 警告ウィンドウ（Slackウィンドウに重ねる透明パネル）
@@ -222,8 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
     overlay = panel
   }
 
+  // どんな理由で消えても、そこから10秒は次の警告を出さない。
   func removeOverlay() {
     guard let overlay else { return }
+    nextWarning = Date().addingTimeInterval(10)
     (overlay.contentView as? WKWebView)?.configuration.userContentController.removeAllScriptMessageHandlers()
     overlay.orderOut(nil)
     self.overlay = nil
@@ -232,7 +231,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
   // 最後のウィンドウを閉じた／Esc
   func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
     removeOverlay()
-    nextWarning = Date().addingTimeInterval(10)
   }
 
   func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage,

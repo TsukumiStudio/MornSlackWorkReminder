@@ -11,10 +11,13 @@
     .note, small { white-space: nowrap; }
     .mac-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
     .mac-footer .version { color: #6b7487; font-size: 11px; }
+    .mac-footer .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
     .mac-footer .buttons { display: flex; gap: 6px; }
+    #update-status { color: #6b7487; font-size: 11px; }
+    #update-status:empty { display: none; }
     .mac-footer button { flex: none; padding: 6px 10px; font-size: 11px; }
     .mac-footer button:disabled { opacity: .5; cursor: default; }
-    #status + .card { margin: 14px 0 0; }
+    #status + .card { margin: 12px 0 0; }
     #update:not(:disabled) { background: #7560db; border-color: #7560db; color: white; }
   `;
   document.head.append(style);
@@ -25,13 +28,14 @@
 
   const footer = document.createElement("footer");
   footer.className = "mac-footer";
-  footer.innerHTML = `<span class="version"></span><span class="buttons"><button id="check" type="button">最新を確認</button><button id="update" type="button" disabled>最新へ更新</button></span>`;
+  footer.innerHTML = `<span class="version"></span><span class="right"><span class="buttons"><button id="check" type="button">最新を確認</button><button id="update" type="button" disabled>最新へ更新</button></span><span id="update-status" role="status"></span></span>`;
   status.after(login);
   login.after(footer);
 
   const loginInput = login.querySelector("input");
   const check = footer.querySelector("#check");
   const update = footer.querySelector("#update");
+  const updateStatus = footer.querySelector("#update-status");
   let version = "";
 
   call({ op: "info" }).then(info => {
@@ -64,9 +68,9 @@
       const latest = (await response.json()).tag_name.replace(/^v/, "");
       update.disabled = !isNewer(latest, version);
       // 最新なら何も言わない。更新があるときだけ知らせる。
-      status.textContent = update.disabled ? "" : `v${latest} があります。`;
+      updateStatus.textContent = update.disabled ? "" : `v${latest} があります。`;
     } catch (error) {
-      status.textContent = `確認できませんでした（${error.message}）。`;
+      updateStatus.textContent = `確認できませんでした（${error.message}）。`;
     } finally {
       check.disabled = false;
     }
@@ -74,10 +78,10 @@
 
   update.addEventListener("click", async () => {
     update.disabled = check.disabled = true;
-    status.textContent = "更新しています。完了すると自動で再起動します…";
+    updateStatus.textContent = "更新しています。完了すると自動で再起動します…";
     const result = await call({ op: "update" });
     // 成功時はアプリが再起動するので、ここに戻るのは失敗時だけ。
-    status.textContent = result.error;
+    updateStatus.textContent = result.error;
     update.disabled = check.disabled = false;
   });
 })();

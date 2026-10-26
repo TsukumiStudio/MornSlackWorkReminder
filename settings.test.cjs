@@ -8,6 +8,9 @@ test("先頭のアンダースコアだけで個人チャンネルを判定す�
   assert.equal(isPersonalChannel("_kakeru-ch"), true);
   assert.equal(isPersonalChannel(" #_kakeru-ch "), true);
   assert.equal(isPersonalChannel("team_channel"), false);
+  assert.equal(isPersonalChannel("times_foo"), true);
+  assert.equal(isPersonalChannel("#Times-foo"), true);
+  assert.equal(isPersonalChannel("dev-times"), false);
   assert.equal(isPersonalChannel(""), false);
   assert.equal(isPersonalChannel(null), false);
 });

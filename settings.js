@@ -49,8 +49,9 @@ globalThis.WorkReminder = (() => {
       (current < end && settings.days.includes((day + 6) % 7));
   }
 
+  // "_" か "times" で始まるチャンネルを個人チャンネル（times）とみなす。
   function isPersonalChannel(name) {
-    return typeof name === "string" && name.trim().replace(/^#\s*/, "").startsWith("_");
+    return typeof name === "string" && /^(?:_|times)/i.test(name.trim().replace(/^#\s*/, ""));
   }
 
   function channelId(url) {
