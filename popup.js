@@ -5,6 +5,13 @@ const status = document.getElementById("status");
 const save = document.getElementById("save");
 const resume = document.getElementById("resume");
 
+// 行を増やさず（画面の大きさを変えず）にボタンの文字で結果を知らせる。
+function flash(button, text) {
+  const original = button.textContent;
+  button.textContent = text;
+  setTimeout(() => { button.textContent = original; }, 1500);
+}
+
 function reportError(message, error) {
   status.textContent = message;
   console.error(message, error);
@@ -45,7 +52,8 @@ document.getElementById("settings").addEventListener("submit", async event => {
       snoozeUntil: 0
     });
     await chrome.storage.local.set(settings);
-    status.textContent = "保存しました。一時停止を解除して反映します。";
+    status.textContent = "";
+    flash(save, "保存しました");
   } catch (error) {
     reportError("設定を保存できませんでした。", error);
   } finally {
@@ -57,7 +65,8 @@ resume.addEventListener("click", async () => {
   resume.disabled = true;
   try {
     await chrome.storage.local.set({ snoozeUntil: 0 });
-    status.textContent = "一時停止を解除しました。";
+    status.textContent = "";
+    flash(resume, "解除しました");
   } catch (error) {
     reportError("一時停止を解除できませんでした。", error);
   } finally {

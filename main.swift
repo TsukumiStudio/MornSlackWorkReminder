@@ -100,7 +100,7 @@ final class OverlayPanel: NSPanel {
   override var canBecomeKey: Bool { true }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKScriptMessageHandler, WKScriptMessageHandlerWithReply {
   let js = JSContext()!
   let warningTemplate = try! String(contentsOf: resources.appendingPathComponent("warning.html"), encoding: .utf8)
   var statusItem: NSStatusItem!
@@ -109,7 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
   var overlay: OverlayPanel?
   var activeChannel = ""
   var enteredAt = Date()
-  var nextWarning = Date.distantPast
+  /// 次の警告までの残り秒数。Slackが前面にある間だけ減る。
+  var cooldown: TimeInterval = 0
+  var lastTick = Date()
   var lastState = ""
   let loginItem = NSMenuItem(title: "ログイン時に起動", action: #selector(toggleLoginItem), keyEquivalent: "")
   let accessibilityItem = NSMenuItem(title: "アクセシビリティ権限を許可…", action: #selector(openAccessibility), keyEquivalent: "")
@@ -147,9 +149,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
     guard let slack = slackWindow() else {
       trace("Slackウィンドウを取得できません（アクセシビリティ許可: \(AXIsProcessTrusted())）")
       reset()
+      lastTick = Date()
       return
     }
     let now = Date()
+    if slack.active { cooldown -= now.timeIntervalSince(lastTick) }
+    lastTick = now
     let name = js.objectForKeyedSubscript("titleChannel").call(withArguments: [slack.title]).toString() ?? ""
     let elapsed = name == activeChannel ? now.timeIntervalSince(enteredAt) * 1000 : 0
     let result = js.objectForKeyedSubscript("check").call(withArguments: [storedSettingsJSON(), name, elapsed])!
@@ -170,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
       removeOverlay()
       return
     }
-    if overlay == nil && now >= nextWarning { showWarning() }
+    if overlay == nil && cooldown <= 0 { showWarning() }
     guard let overlay else { return }
     if let number = slack.windowNumber {
       // 常にSlackウィンドウの直上へ。他アプリのウィンドウより手前には出さない。
@@ -219,10 +224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
     overlay = panel
   }
 
-  // どんな理由で消えても、そこから10秒は次の警告を出さない。
+  // どんな理由で消えても、そこからSlackを10秒使うまでは次の警告を出さない。
   func removeOverlay() {
     guard let overlay else { return }
-    nextWarning = Date().addingTimeInterval(10)
+    cooldown = 10
     (overlay.contentView as? WKWebView)?.configuration.userContentController.removeAllScriptMessageHandlers()
     overlay.orderOut(nil)
     self.overlay = nil
@@ -286,7 +291,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
       config.userContentController.addUserScript(WKUserScript(source: macUI, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
       config.userContentController.addScriptMessageHandler(self, contentWorld: .page, name: "mac")
       let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 600, height: 700), configuration: config)
-      web.navigationDelegate = self
       let controller = NSViewController()
       controller.view = web
       popover.contentViewController = controller
@@ -296,13 +300,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
     web.loadFileURL(resources.appendingPathComponent("popup.html"), allowingReadAccessTo: resources)
     NSApp.activate()
     popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-  }
-
-  // 設定画面の中身に合わせてポップオーバーの大きさを決める。
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-    webView.evaluateJavaScript("[document.documentElement.scrollWidth, document.documentElement.scrollHeight]") { [weak self] size, _ in
-      if let size = size as? [CGFloat], size.count == 2 { self?.popover.contentSize = NSSize(width: size[0], height: size[1]) }
-    }
   }
 
   // 設定画面のMac版専用部品（popup-mac.js）からの依頼。
@@ -321,6 +318,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, WKNavi
       reply(result)
     case "update":
       update(reply: reply)
+    case "resize": // 中身の大きさが変わるたびにポップオーバーを合わせる（スクロールバーを出さない）
+      if let width = body["width"] as? CGFloat, let height = body["height"] as? CGFloat {
+        popover.contentSize = NSSize(width: width, height: height)
+      }
+      reply([:])
     default:
       reply(["error": "不明な操作です。"])
     }

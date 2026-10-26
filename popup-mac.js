@@ -7,6 +7,7 @@
 
   const style = document.createElement("style");
   style.textContent = `
+    html { overflow: hidden; }
     body { width: 600px; }
     .note, small { white-space: nowrap; }
     .mac-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
@@ -37,6 +38,10 @@
   const update = footer.querySelector("#update");
   const updateStatus = footer.querySelector("#update-status");
   let version = "";
+
+  new ResizeObserver(() => {
+    call({ op: "resize", width: document.body.offsetWidth, height: document.body.offsetHeight });
+  }).observe(document.body);
 
   call({ op: "info" }).then(info => {
     version = info.version;
